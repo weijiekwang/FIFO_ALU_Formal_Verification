@@ -9,23 +9,21 @@ elaborate -top top
 clock clk
 reset reset
 
-# Assume initial reset
-assume { reset } @ 0
 
 # Basic protocol assertions for FIFO interfaces
-assert { top.f_in.wptr >= 0 && top.f_in.wptr < 8 }
-assert { top.f_in.rptr >= 0 && top.f_in.rptr < 8 }
+assert -name fifo_wptr_bound {f_in.wptr >= 0 && f_in.wptr < 8}
+assert -name fifo_rptr_bound {f_in.rptr >= 0 && f_in.rptr < 8}
 
 # Basic protocol assertions for ALU
-assert { top.alu1.count >= 0 && top.alu1.count < 4 }
+assert -name alu_count_bound {alu1.count >= 0 && alu1.count < 4}
 
 # Protocol checks
-assert { (top.f_in.full == 1) |-> !top.f_in.valid }
-assert { (top.f_in.empty == 1) |-> !top.f_in.valid_out }
+assert -name full_valid_check {(f_in.full == 1) |-> !f_in.valid}
+assert -name empty_valid_check {(f_in.empty == 1) |-> !f_in.valid_out}
 
 # Check ALU operation integrity
-assert { (top.alu1.operand == 2'b00) |-> (top.alu1.result == (top.alu1.data1 + top.alu1.data2)) }
-assert { (top.alu1.operand == 2'b01) |-> (top.alu1.result == (top.alu1.data1 - top.alu1.data2)) }
+assert -name alu_add_check {(alu1.operand == 2'b00) |-> (alu1.result == (alu1.d$
+assert -name alu_sub_check {(alu1.operand == 2'b01) |-> (alu1.result == (alu1.d$
 
 # Set proof depth
 set_max_trace_length 20
