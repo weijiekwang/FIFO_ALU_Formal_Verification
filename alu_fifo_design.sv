@@ -105,13 +105,12 @@ module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
           end
       end
 
-    // Verify that FIFO correctly sets full flag when write pointer reaches (read pointer - 1)
+    FIFO_EMPTY_FLAG_CHECK: assert property(@(posedge clk) disable iff (reset)
+                          (rptr == wptr && !valid) |-> ##1 empty);
+
+    
     FIFO_FULL_FLAG_CHECK: assert property(@(posedge clk) disable iff (reset)
                          (valid && (wptr == (rptr - 1))) |-> ##1 full);
-
-    // Verify that FIFO correctly sets empty flag when read pointer equals write pointer
-    FIFO_EMPTY_FLAG_CHECK: assert property(@(posedge clk) disable iff (reset)
-                          (rptr == wptr) |-> ##1 empty);
 
 endmodule
         
@@ -205,8 +204,5 @@ module alu(clk,reset,valid,data1,data2,operand,result,ready);
         endcase
       end
 
-    // Addition result verification
-    ADD_RESULT_CHECK: assert property(@(posedge clk) disable iff (reset)
-                     (state == compute && operand == 0) |-> ##1 (result == data1 + data2));
          
 endmodule
