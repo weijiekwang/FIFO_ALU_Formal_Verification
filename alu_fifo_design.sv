@@ -132,6 +132,7 @@ module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
 endmodule
         
 module alu(clk,reset,valid,data1,data2,operand,result,ready);
+    
     parameter cycles = 3;
     
     input clk,reset;
@@ -149,95 +150,108 @@ module alu(clk,reset,valid,data1,data2,operand,result,ready);
     parameter compute = 1'b0;
     parameter wait_state = 1'b1;
   
-    always@(posedge reset)
-      begin
+    always@(posedge reset) begin
         ready <= 1;
         result <= 0;
         count <= 0;
         state <= 0;
-      end
+    end
     
-    always@(posedge clk)
-      begin
+    always@(posedge clk) begin
         case(state)        
-          compute: begin
-            case(operand)
-              0: begin 
-                result <= data1+data2;
-                state <= compute;
-              end
-              1: begin
-                result <= data1-data2;
-                state <= compute;
-              end
-              2: begin
-                state <= wait_state;
-                operand_latch <= operand;
-                data1_latch <= data1;
-                data2_latch <= data2;
-              end
-              3: begin
-                state <= wait_state;
-                operand_latch <= operand;
-                data1_latch <= data1;
-                data2_latch <= data2;
-              end
-            endcase
-          end
-          wait_state: begin
-            case(operand_latch)
-              2: begin
-                if(count == cycles-1) begin
-                  result <= data1_latch*data2_latch;
-                  ready <= 1;
-                  count <= 0;
-                  state <= compute;
+            compute: begin
+                if (valid) begin
+                    case(operand)
+                        0: begin 
+                            result <= {4'b0, data1 + data2};
+                            ready <= 1;
+                            state <= compute;
+                        end
+                        1: begin
+                            result <= {4'b0, data1 - data2};
+                            ready <= 1;
+                            state <= compute;
+                        end
+                        2: begin
+                            state <= wait_state;
+                            operand_latch <= operand;
+                            data1_latch <= data1;
+                            data2_latch <= data2;
+                            ready <= 0;
+                        end
+                        3: begin
+                            state <= wait_state;
+                            operand_latch <= operand;
+                            data1_latch <= data1;
+                            data2_latch <= data2;
+                            ready <= 0;
+                        end
+                    endcase
                 end
-                else begin
-                  count <= count + 1;
-                  ready <= 0;
-                end
-              end
-              3: begin
-                if(count == cycles-1) begin
-                  result <= data1_latch/data2_latch;
-                  ready <= 1;
-                  count <= 0;
-                  state <= compute;
-                end
-                else begin
-                  count <= count + 1;
-                  ready <= 0;
-                end
-              end
-            endcase
-          end
-        endcase
-      end
+            end
 
-    // ALU Assertions
-    ASSERT_ALU_RESET: assert property(@(posedge clk)
-        $rose(reset) |-> ##1 (ready == 1 && result == 0 && count == 0 && state == 0));
+            wait_state: begin
+                case(operand_latch)
+                    2: begin
+                        if(count == cycles-1) begin
+                            result <= data1_latch * data2_latch;
+                            ready <= 1;
+                            count <= 0;
+                            state <= compute;
+                        end
+                        else begin
+                            count <= count + 1;
+                            ready <= 0;
+                        end
+                    end
+                    3: begin
+                        if(count == cycles-1) begin
+                            result <= data1_latch / data2_latch;
+                            ready <= 1;
+                            count <= 0;
+                            state <= compute;
+                        end
+                        else begin
+                            count <= count + 1;
+                            ready <= 0;
+                        end
+                    end
+                endcase
+            end
+        endcase
+    end
+
+    // Assertions
+    ADD_RESULT_CHECK: assert property(
+        @(posedge clk) disable iff (reset)
+        (valid && operand == 2'b00) |-> ##1 (result == {4'b0, data1 + data2}));
     
-    ASSERT_ADD_RESULT: assert property(@(posedge clk) disable iff (reset)
-        (operand == 2'b00) |-> ##1 (result == $past(data1) + $past(data2)));
+    SUB_RESULT_CHECK: assert property(
+        @(posedge clk) disable iff (reset)
+        (valid && operand == 2'b01) |-> ##1 (result == {4'b0, data1 - data2}));
     
-    ASSERT_SUB_RESULT: assert property(@(posedge clk) disable iff (reset)
-        (operand == 2'b01) |-> ##1 (result == $past(data1) - $past(data2)));
+    READY_SINGLE_CYCLE: assert property(
+        @(posedge clk) disable iff (reset)
+        (valid && operand inside {2'b00, 2'b01}) |-> ready);
     
-    ASSERT_MULT_LATENCY: assert property(@(posedge clk) disable iff (reset)
-        (operand == 2'b10 && state == wait_state) |-> ##(cycles) (ready == 1));
+    READY_MULTI_CYCLE_START: assert property(
+        @(posedge clk) disable iff (reset)
+        (valid && operand inside {2'b10, 2'b11} && state == wait_state && count != cycles-1) |-> !ready);
     
-    ASSERT_DIV_LATENCY: assert property(@(posedge clk) disable iff (reset)
-        (operand == 2'b11 && state == wait_state) |-> ##(cycles) (ready == 1));
+    READY_MULTI_CYCLE_END: assert property(
+        @(posedge clk) disable iff (reset)
+        (state == wait_state && count == cycles-1) |-> ##1 ready);
     
-    ASSERT_RESULT_RANGE: assert property(@(posedge clk) disable iff (reset)
-        result[8:0] inside {[0:511]});
+    COUNTER_RANGE_CHECK: assert property(
+        @(posedge clk) disable iff (reset)
+        (state == wait_state) |-> (count < cycles));
     
-    COVER_READY_SIGNAL: cover property(@(posedge clk) disable iff (reset)
-        (!ready ##[1:cycles] ready));
+    MULTIPLY_RESULT_CHECK: assert property(
+        @(posedge clk) disable iff (reset)
+        (operand_latch == 2'b10 && count == cycles-1) |-> ##1 (result == data1_latch * data2_latch));
     
-    ASSERT_VALID_OPCODE: assert property(@(posedge clk) disable iff (reset)
-        operand inside {[0:3]});
+    DIVIDE_RESULT_CHECK: assert property(
+        @(posedge clk) disable iff (reset)
+        (operand_latch == 2'b11 && count == cycles-1) |-> ##1 (result == data1_latch / data2_latch));
          
 endmodule
