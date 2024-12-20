@@ -1,6 +1,4 @@
-Yes, I'll provide the complete SystemVerilog file with the top module and both modified FIFO and ALU modules. Here's the full file:
 
-```systemverilog
 module top(clk,reset,data,valid,ready,result);
     input clk,reset;
     input [9:0]data;
