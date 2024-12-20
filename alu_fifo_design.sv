@@ -1,4 +1,6 @@
-// Code your design here
+Yes, I'll provide the complete SystemVerilog file with the top module and both modified FIFO and ALU modules. Here's the full file:
+
+```systemverilog
 module top(clk,reset,data,valid,ready,result);
     input clk,reset;
     input [9:0]data;
@@ -18,11 +20,11 @@ module top(clk,reset,data,valid,ready,result);
     alu alu1(clk,reset,valid_out,data_out_fifo[3:0],data_out_fifo[7:4],data_out_fifo[9:8],data_out_alu,ready_out_alu);
     fifo #(.memory_width(8)) f_out(clk,reset,data_out_alu,result,ready_out_alu,ready,ready_out_alu,full_out,empty_out);
     
-  endmodule
+endmodule
   
-  module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
+module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
    
-     parameter memory_width = 9;
+    parameter memory_width = 9;
     
     input clk,reset;
     input [memory_width:0]data_in;
@@ -32,7 +34,6 @@ module top(clk,reset,data,valid,ready,result);
     output reg valid_out;
     output reg full,empty;
     
-   
     reg [memory_width:0] mem [8];
     reg [2:0]wptr;
     reg [2:0]rptr;
@@ -40,7 +41,6 @@ module top(clk,reset,data,valid,ready,result);
     
     parameter send = 2'b00;
     parameter wait_ready = 2'b01;
-  
     parameter end_tx = 2'b10;
   
     always@(posedge clk or posedge reset)
@@ -106,13 +106,17 @@ module top(clk,reset,data,valid,ready,result);
           end
           end
       end
-  endmodule
+
+    // Verify that FIFO correctly sets full flag when write pointer reaches (read pointer - 1)
+    FIFO_FULL_FLAG_CHECK: assert property(@(posedge clk) disable iff (reset)
+                         (valid && (wptr == (rptr - 1))) |-> ##1 full);
+
+    // Verify that FIFO correctly sets empty flag when read pointer equals write pointer
+    FIFO_EMPTY_FLAG_CHECK: assert property(@(posedge clk) disable iff (reset)
+                          (rptr == wptr) |-> ##1 empty);
+
+endmodule
         
-  
-        
-        
-        
-  
 module alu(clk,reset,valid,data1,data2,operand,result,ready);
     
     parameter cycles = 3;
@@ -130,7 +134,7 @@ module alu(clk,reset,valid,data1,data2,operand,result,ready);
     reg [1:0]state;
     
     parameter compute = 1'b0;
-      parameter wait_state = 1'b1;
+    parameter wait_state = 1'b1;
   
     always@(posedge reset)
       begin
@@ -164,8 +168,6 @@ module alu(clk,reset,valid,data1,data2,operand,result,ready);
                                      operand_latch <= operand;
                                      data1_latch <= data1;
                                      data2_latch <= data2;
-
-
                           end
                           endcase
                       end
@@ -198,7 +200,6 @@ module alu(clk,reset,valid,data1,data2,operand,result,ready);
                       begin
                            count <= count + 1;
                             ready <= 0;
-                        
                       end
               end
           endcase
