@@ -17,7 +17,29 @@ module top(clk,reset,data,valid,ready,result);
     fifo f_in(clk,reset,data,data_out_fifo,valid,valid_out,ready_out_alu,full,empty);
     alu alu1(clk,reset,valid_out,data_out_fifo[3:0],data_out_fifo[7:4],data_out_fifo[9:8],data_out_alu,ready_out_alu);
     fifo #(.memory_width(8)) f_out(clk,reset,data_out_alu,result,ready_out_alu,ready,ready_out_alu,full_out,empty_out);
-    
+
+// Verify FIFO-ALU handshaking
+TOP_fifo_alu_valid: assert property (@(posedge clk)
+    f_in.valid_out |-> !alu1.ready);
+
+// Verify ALU-FIFO handshaking
+TOP_alu_fifo_ready: assert property (@(posedge clk)
+    alu1.ready |-> !f_out.full);
+
+// Verify data integrity between FIFOs and ALU
+TOP_data_flow: assert property (@(posedge clk)
+    f_in.valid_out |-> (f_in.data_out[3:0] == alu1.data1 && 
+                        f_in.data_out[7:4] == alu1.data2 &&
+                        f_in.data_out[9:8] == alu1.operand));
+
+// Verify result propagation
+TOP_result_prop: assert property (@(posedge clk)
+    alu1.ready |-> (alu1.result == f_out.data_in));
+
+TOP_reset: assert property (@(posedge reset)
+    (f_in.empty && f_out.empty && alu1.ready));
+
+
 endmodule
   
 module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
