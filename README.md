@@ -18,8 +18,8 @@ In addition, we also consider other designs which are shown below:
 ## Instruction to run the code
 Run the command: 
 
-'''
+```
 sh run.sh 
-'''
+```
 
 Click the green arrow in the top bar (Prove all). You should see every properties being verified, some of them failed but most of them passed.
