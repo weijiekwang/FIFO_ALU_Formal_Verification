@@ -151,11 +151,11 @@ FIFO_full: assert property (@(posedge clk) $past(valid && wptr == (rptr - 1)) |-
 // verify the empty
 FIFO_empty: assert property (@(posedge clk) $past(valid && (wptr == rptr) && reset_done) |-> !full && empty);
 
-//cover wptr add
+// cover wptr add
 FIFO_wptr: cover property (@(posedge clk) 
     (wptr != 7) |-> (wptr == $past(wptr) + 1));
 
-//cover rptr add
+// cover rptr add
 FIFO_rptr: cover property (@(posedge clk) 
     (rptr != 7) |-> (rptr == $past(rptr) + 1));
 
@@ -164,7 +164,6 @@ FIFI_write_full: assert property (@(posedge clk) full && valid |-> (wptr == $pas
 
 // fifo empty -> no change
 FIFO_read_emtpy: assert property (@(posedge clk) empty && ready |-> (rptr == $past(rptr)));
-
 // fifo wptr_add
 FIFO_wptr_add: assert property (@(posedge clk) $past(reset, 2) && valid && !empty && !full |-> (wptr == $past(wptr) + 1));
 
