@@ -1,7 +1,7 @@
 clear -all
 
-analyze -sv09 fifo.sv
-elaborate -top fifo
+analyze -sv09 alu_fifo.sv
+elaborate -top top
 
 clock clk
-reset ~rst_n
+reset reset
