@@ -14,7 +14,28 @@ module top(clk,reset,data,valid,ready,result);
     fifo f_in(clk,reset,data,data_out_fifo,valid,valid_out,ready_out_alu,full,empty);
     alu alu1(clk,reset,valid_out,data_out_fifo[3:0],data_out_fifo[7:4],data_out_fifo[9:8],data_out_alu,ready_out_alu);
     fifo #(.memory_width(8)) f_out(clk,reset,data_out_alu,result,ready_out_alu,ready,ready_out_alu,full_out,empty_out);
-    
+
+// Verify FIFO-ALU handshaking
+TOP_fifo_alu_valid: assert property (@(posedge clk)
+    f_in.valid_out && !alu1.ready |-> ##1 !f_in.empty);
+
+// Verify ALU-FIFO handshaking
+TOP_alu_fifo_ready: assert property (@(posedge clk)
+    alu1.ready && !f_out.full |-> ##1 f_out.empty);
+
+// Verify data integrity between FIFOs and ALU
+TOP_data_flow: assert property (@(posedge clk)
+    f_in.valid_out |-> (f_in.data_out[3:0] == alu1.data1 && 
+                        f_in.data_out[7:4] == alu1.data2 &&
+                        f_in.data_out[9:8] == alu1.operand));
+
+// Verify result propagation
+TOP_result_prop: assert property (@(posedge clk)
+    alu1.ready |-> (alu1.result == f_out.data_in));
+
+TOP_reset: assert property (@(posedge reset)
+    (f_in.empty && f_out.empty && alu1.ready));
+
 endmodule
   
 module fifo(clk,reset,data_in,data_out,valid,valid_out,ready,full,empty);
@@ -144,102 +165,115 @@ FIFI_write_full: assert property (@(posedge clk) full && valid |-> (wptr == $pas
 // fifo empty -> no change
 FIFO_read_emtpy: assert property (@(posedge clk) empty && ready |-> (rptr == $past(rptr)));
 
-<<<<<<< HEAD
 // fifo wptr_add
 FIFO_wptr_add: assert property (@(posedge clk) $past(reset, 2) && valid && !empty && !full |-> (wptr == $past(wptr) + 1));
-=======
-
->>>>>>> f9a36690a7f5e6f29940cd53ddf25e4fc3c43734
 
 
 
        
 endmodule
         
-module alu(clk,reset,valid,data1,data2,operand,result,ready);
+  
+module alu(clk, reset, valid, data1, data2, operand, result, ready);
 
     parameter cycles = 3;
+
+    input clk, reset;
+    input valid;
+    input [3:0] data1, data2;
+    input [1:0] operand;
+    output reg [8:0] result;
+    output reg ready;
     
-    input clk,reset;
-    input valid;// only valid == 0, the alu could work
-    input [3:0]data1,data2;
-    input [1:0]operand;
-    output reg [8:0]result;
-    output reg ready;// could process the new data
-    
-    //precess the multi and divide
-    reg [4:0]count = 0; //connect FSM, count cycles -> state(compute/wait_state)
     reg [1:0]operand_latch;
+    reg [4:0] count;
+    reg [1:0] state;
     reg [3:0]data1_latch,data2_latch; // lock data ,keep value
-    reg [1:0]state; //2 bits
-    
+
     parameter compute = 1'b0;
     parameter wait_state = 1'b1;
-  
-    always@(posedge reset)
-      begin
-        ready <= 1;
-        result <= 0;
-        count <= 0;
-        state <= 0;
-      end
-    
-    always@(posedge clk)
-      begin
-        case(state)        
-          compute: begin
-            case(operand)
-              0: begin 
-                result <= data1+data2;
-                state <= compute;
-              end
-              1: begin
-                result <= data1-data2;
-                state <= compute;
-              end
-              2: begin
-                state <= wait_state;
-                operand_latch <= operand;
-                data1_latch <= data1;
-                data2_latch <= data2;
-              end
-              3: begin
-                state <= wait_state;
-                operand_latch <= operand;
-                data1_latch <= data1;
-                data2_latch <= data2;
-              end
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            ready <= 1;
+            result <= 0;
+            count <= 0;
+            state <= compute;
+        end else begin
+            case (state)
+                compute: begin
+                    case (operand)
+                        2'b00: begin
+                            result <= data1 + data2;  // Addition
+                            ready <= 1;
+                        end
+                        2'b01: begin
+                            result <= data1 - data2;  // Subtraction
+                            ready <= 1;
+                        end
+                        2'b10: begin  // Multiplication
+                            if (count == cycles - 1) begin
+                                result <= data1_latch * data2_latch;
+                                ready <= 1;
+                                count <= 0;
+                                state <= compute;
+                            end else begin
+                                count <= count + 1;
+                                ready <= 0;
+                                state <= wait_state;
+				operand_latch <= operand;
+                                data1_latch <= data1;
+                                data2_latch <= data2;
+                            end
+                        end
+                        2'b11: begin  // Division
+                            if (data2 != 0) begin
+                                if (count == cycles - 1) begin
+                                    result <= data1_latch / data2_latch;
+                                    ready <= 1;
+                                    count <= 0;
+                                    state <= compute;
+                                end else begin
+                                    count <= count + 1;
+                                    ready <= 0;
+                                    state <= wait_state;
+				    operand_latch <= operand;
+                                    data1_latch <= data1;
+                		    data2_latch <= data2;
+                                end
+                            end else begin
+                                result <= 9'b0;  // Division by zero
+                                ready <= 1;
+                                state <= compute;
+                            end
+                        end
+                    endcase
+                end
+                wait_state: begin
+                    if (count == cycles - 1) begin
+                        state <= compute;
+                    end else begin
+                        count <= count + 1;
+                    end
+                end
             endcase
-          end
-          wait_state: begin
-            case(operand_latch)
-              2: begin
-                if(count == cycles-1) begin
-                  result <= data1_latch*data2_latch;
-                  ready <= 1;
-                  count <= 0;
-                  state <= compute;
-                end
-                else begin
-                  count <= count + 1;
-                  ready <= 0;
-                end
-              end
-              3: begin
-                if(count == cycles-1) begin
-                  result <= data1_latch/data2_latch;
-                  ready <= 1;
-                  count <= 0;
-                  state <= compute;
-                end
-                else begin
-                  count <= count + 1;
-                  ready <= 0;
-                end
-              end
-            endcase
-          end
-        endcase
-      end
-         
-endmodule
+        end
+    end
+ 
+
+// Assertion to verify addition functionality in ALU
+ADD_OPERATION_CHECK: assert property (@(posedge clk) disable iff (reset) 
+    (valid && operand == 2'b00 && state == 0) |-> ##1 (result == data1 + data2));
+
+SUB_OPERATION_CHECK: assert property (@(posedge clk) disable iff (reset) 
+    (valid && operand == 2'b01 && state == 0) |-> ##1 (result == data1 - data2));
+
+MUL_OPERATION_CHECK: assert property (@(posedge clk) disable iff (reset) 
+    (valid && operand == 2'b10 && state == 0 && count == cycles - 1) |-> ##1 (result == data1_latch * data2_latch));
+
+DIV_OPERATION_CHECK: assert property (@(posedge clk) disable iff (reset) 
+    (valid && operand == 2'b11 && data2 != 0 && count == cycles - 1) |-> ##1 (result == data1_latch / data2_latch));
+
+
+  endmodule
+
